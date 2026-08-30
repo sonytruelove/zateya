@@ -1,9 +1,10 @@
 @startuml c4-component-participation
 ' C4, уровень 3 — компоненты приложения для сценария «розыгрыш попытки»
-!pragma layout smetana
 !include ../.tools/c4/C4_Component.puml
 
 skinparam linetype ortho
+skinparam nodesep 55
+skinparam ranksep 90
 skinparam defaultFontName sans-serif
 LAYOUT_TOP_DOWN()
 

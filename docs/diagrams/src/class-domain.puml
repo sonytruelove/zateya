@@ -1,6 +1,5 @@
 @startuml class-domain
 ' UML: диаграмма классов доменного слоя «Затея»
-!pragma layout smetana
 skinparam linetype ortho
 skinparam defaultFontName sans-serif
 skinparam classAttributeIconSize 0

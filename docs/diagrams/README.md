@@ -24,11 +24,17 @@ bash docs/diagrams/render.sh
 ```
 
 Скрипт переходит в `docs/diagrams/`, при отсутствии `.tools/plantuml.jar` скачивает
-релиз, затем прогоняет все `src/*.puml` через PlantUML (движок раскладки — встроенный
-Smetana, `!pragma layout smetana`, Graphviz не требуется) и все `src/*.mmd` через
-`@mermaid-js/mermaid-cli` (`npx`). Результат перезаписывается в `out/`.
+релиз, затем прогоняет все `src/*.puml` через PlantUML (движок раскладки — Graphviz
+`dot`) и все `src/*.mmd` через `@mermaid-js/mermaid-cli` (`npx`). Результат
+перезаписывается в `out/`.
 
-Требования: Java 21+ и Node.js в `PATH`.
+Все связи на диаграммах — строго ортогональные (`skinparam linetype ortho`): линии
+идут только по горизонтали и вертикали, повороты — под прямым углом. Ортогональную
+раскладку умеет только Graphviz; встроенный движок Smetana её игнорирует, поэтому
+`dot` обязателен.
+
+Требования: Java 21+, Graphviz (`dot`) и Node.js в `PATH`. Если `dot` не в `PATH`,
+`render.sh` подхватывает портативную установку из `$HOME/graphviz/bin`.
 
 ### Рендер по одному файлу
 

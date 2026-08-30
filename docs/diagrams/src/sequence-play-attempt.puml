@@ -1,6 +1,5 @@
 @startuml sequence-play-attempt
 ' UML: диаграмма последовательности «розыгрыш попытки в механике»
-!pragma layout smetana
 skinparam defaultFontName sans-serif
 skinparam sequenceMessageAlign center
 skinparam maxMessageSize 220

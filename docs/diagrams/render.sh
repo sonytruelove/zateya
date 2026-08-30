@@ -5,6 +5,9 @@
 #
 # Требования:
 #   - Java 21+ в PATH (java -version).
+#   - Graphviz (dot) в PATH — нужен PlantUML для строго ортогональных линий
+#     (skinparam linetype ortho); встроенный движок Smetana ortho не умеет.
+#     Если dot не в PATH, скрипт ищет портативную установку в $HOME/graphviz/bin.
 #   - Node.js в PATH (для Mermaid; используется npx @mermaid-js/mermaid-cli).
 #   - Файл .tools/plantuml.jar. Если его нет — скрипт попытается скачать релиз.
 #
@@ -16,6 +19,18 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
+
+# --- Graphviz: PlantUML рисует ортогональные линии только через dot ---
+if ! command -v dot >/dev/null 2>&1; then
+  if [[ -x "$HOME/graphviz/bin/dot" || -x "$HOME/graphviz/bin/dot.exe" ]]; then
+    export PATH="$HOME/graphviz/bin:$PATH"
+  else
+    echo "ОШИБКА: не найден Graphviz (dot). Установите Graphviz или распакуйте" >&2
+    echo "портативную сборку в \$HOME/graphviz (нужен \$HOME/graphviz/bin/dot)." >&2
+    exit 1
+  fi
+fi
+echo "Graphviz: $(command -v dot)"
 
 PLANTUML_JAR=".tools/plantuml.jar"
 PUPPETEER_CFG=".tools/puppeteer.json"
@@ -34,7 +49,7 @@ if [[ ! -f "$PUPPETEER_CFG" ]]; then
 fi
 
 echo "== PlantUML =="
-# Smetana-раскладка задана внутри каждого .puml (!pragma layout smetana), graphviz не нужен.
+# Раскладка — Graphviz (dot): нужен для строго ортогональных линий.
 for f in src/*.puml; do
   [[ -e "$f" ]] || continue
   echo "  $f -> out/$(basename "${f%.puml}").svg"

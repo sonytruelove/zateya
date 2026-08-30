@@ -1,6 +1,5 @@
 @startuml state-campaign
 ' UML: диаграмма состояний агрегата «Кампания»
-!pragma layout smetana
 skinparam linetype ortho
 skinparam defaultFontName sans-serif
 
