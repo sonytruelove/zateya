@@ -1,0 +1,204 @@
+@startuml class-domain
+' UML: диаграмма классов доменного слоя «Затея»
+!pragma layout smetana
+skinparam linetype ortho
+skinparam defaultFontName sans-serif
+skinparam classAttributeIconSize 0
+hide circle
+left to right direction
+
+title Доменный слой «Затея» — классы и связи
+
+package "Кампания" {
+  class Campaign <<агрегат>> {
+    +id: CampaignId
+    +title: string
+    +status: CampaignStatus
+    +schedule: Schedule
+    --
+    +publish(): void
+    +activate(): void
+    +pause(): void
+    +finish(): void
+  }
+  enum CampaignStatus {
+    Черновик
+    Опубликована
+    Активна
+    Приостановлена
+    Завершена
+    Архивная
+  }
+  class Schedule <<объект-значение>> {
+    +startsAt: DateTimeImmutable
+    +endsAt: DateTimeImmutable
+    +isWithin(now): bool
+  }
+}
+
+package "Механика" {
+  abstract class Mechanic <<агрегат>> {
+    +id: MechanicId
+    +campaignId: CampaignId
+    +type: MechanicType
+    --
+    +{abstract} evaluate(input: PlayInput): Outcome
+  }
+  class QuizMechanic
+  class WheelMechanic
+  class CollectSetMechanic
+  enum MechanicType {
+    Викторина
+    КолесоФортуны
+    СобериНабор
+    Промокоды
+  }
+  class Outcome <<объект-значение>> {
+    +isWin: bool
+    +score: int
+    +prizeTier: PrizeTier
+  }
+}
+
+package "Участие" {
+  class Participant <<агрегат>> {
+    +id: ParticipantId
+    +campaignId: CampaignId
+    +channel: Channel
+    +externalId: string
+  }
+  enum Channel {
+    Веб
+    Telegram
+    VK
+  }
+  class Attempt <<агрегат>> {
+    +id: AttemptId
+    +participantId: ParticipantId
+    +mechanicId: MechanicId
+    +outcome: Outcome
+    +playedAt: DateTimeImmutable
+  }
+  class AttemptBalance <<объект-значение>> {
+    +participantId: ParticipantId
+    +remaining: int
+    +spendOne(): void
+  }
+}
+
+package "Призы" {
+  class Prize <<агрегат>> {
+    +id: PrizeId
+    +poolId: PrizePoolId
+    +tier: PrizeTier
+    +title: string
+  }
+  class PrizePool <<агрегат>> {
+    +id: PrizePoolId
+    +campaignId: CampaignId
+    +remaining: int
+    --
+    +reserveOne(tier: PrizeTier): Prize
+  }
+  enum PrizeTier {
+    Главный
+    Обычный
+    Утешительный
+    Пусто
+  }
+}
+
+package "Промокоды" {
+  class PromoCode <<агрегат>> {
+    +id: PromoCodeId
+    +bookId: PromoCodeBookId
+    +value: string
+    +issuedToParticipantId: ParticipantId
+    +issuedAt: DateTimeImmutable
+  }
+  class PromoCodeBook <<агрегат>> {
+    +id: PromoCodeBookId
+    +campaignId: CampaignId
+    +remaining: int
+    --
+    +issueNext(to: ParticipantId): PromoCode
+  }
+}
+
+package "Рейтинг" {
+  class Leaderboard <<агрегат>> {
+    +campaignId: CampaignId
+    --
+    +addScore(p: ParticipantId, delta: int): void
+    +top(limit: int): array
+  }
+}
+
+package "Доменные события" {
+  interface DomainEvent
+  class AttemptPlayed
+  class PrizeIssued
+  class PromoCodeIssued
+  class CampaignPublished
+}
+
+package "Порты хранилищ" {
+  interface CampaignRepository {
+    +get(id): Campaign
+    +save(c: Campaign): void
+  }
+  interface MechanicRepository {
+    +get(id): Mechanic
+  }
+  interface ParticipantRepository {
+    +get(id): Participant
+    +save(p: Participant): void
+  }
+  interface AttemptRepository {
+    +save(a: Attempt): void
+  }
+  interface PrizePoolRepository {
+    +get(id): PrizePool
+  }
+  interface PromoCodeBookRepository {
+    +get(id): PromoCodeBook
+  }
+}
+
+Campaign *-- Schedule
+Campaign --> CampaignStatus
+Campaign "1" o-- "many" Mechanic
+Mechanic <|-- QuizMechanic
+Mechanic <|-- WheelMechanic
+Mechanic <|-- CollectSetMechanic
+Mechanic --> MechanicType
+Mechanic ..> Outcome : создаёт
+Campaign "1" o-- "many" Participant
+Participant --> Channel
+Participant "1" -- "many" Attempt
+Attempt *-- Outcome
+Participant "1" -- "1" AttemptBalance
+Campaign "1" -- "1" PrizePool
+PrizePool "1" *-- "many" Prize
+Prize --> PrizeTier
+Campaign "1" -- "1" PromoCodeBook
+PromoCodeBook "1" *-- "many" PromoCode
+Campaign "1" -- "1" Leaderboard
+
+DomainEvent <|.. AttemptPlayed
+DomainEvent <|.. PrizeIssued
+DomainEvent <|.. PromoCodeIssued
+DomainEvent <|.. CampaignPublished
+Attempt ..> AttemptPlayed
+PrizePool ..> PrizeIssued
+PromoCodeBook ..> PromoCodeIssued
+Campaign ..> CampaignPublished
+
+CampaignRepository ..> Campaign
+MechanicRepository ..> Mechanic
+ParticipantRepository ..> Participant
+AttemptRepository ..> Attempt
+PrizePoolRepository ..> PrizePool
+PromoCodeBookRepository ..> PromoCodeBook
+
+@enduml

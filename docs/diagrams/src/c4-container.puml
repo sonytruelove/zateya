@@ -1,0 +1,50 @@
+@startuml c4-container
+' C4, уровень 2 — контейнеры системы «Затея»
+!pragma layout smetana
+!include ../.tools/c4/C4_Container.puml
+
+skinparam linetype ortho
+skinparam defaultFontName sans-serif
+LAYOUT_TOP_DOWN()
+
+title Контейнеры системы «Затея» (C4, уровень 2)
+
+Person(participant, "Участник", "Веб / Telegram / VK")
+Person(organizer, "Организатор кампаний", "Настройка и модерация")
+
+System_Boundary(zateya, "Затея") {
+  Container(spa, "Веб-клиент (SPA)", "Vue", "Конструктор кампаний, игровые экраны, живой рейтинг")
+  Container(api, "Приложение", "PHP 8.5, Laravel 13, Octane на RoadRunner", "Внешний интерфейс OpenAPI 3.1, сценарии использования, обработчики вебхуков Telegram/VK")
+  Container(workers, "Воркеры очередей", "PHP, Laravel queue", "Отложенная выдача призов, уведомления, обработка доменных событий")
+  ContainerDb(pg, "База данных", "PostgreSQL", "Кампании, механики, участники, попытки, призовой фонд, книга промокодов")
+  ContainerDb(redis, "Кэш и счётчики", "Redis", "Рейтинг (ZSET), баланс и счётчики попыток, ограничение частоты")
+  ContainerQueue(rmq, "Брокер сообщений", "RabbitMQ", "Доменные события, отложенные задания, уведомления")
+}
+
+System_Ext(centrifugo, "Centrifugo", "Сервер веб-сокетов")
+System_Ext(tg, "Telegram Bot API", "")
+System_Ext(vk, "VK API", "")
+
+Rel(participant, spa, "Работает", "HTTPS")
+Rel(organizer, spa, "Работает", "HTTPS")
+Rel(spa, api, "Вызовы внешнего интерфейса", "HTTPS / JSON")
+Rel(spa, centrifugo, "Подписка на каналы", "WebSocket")
+
+Rel(tg, api, "Обновления (вебхук)", "HTTPS")
+Rel(vk, api, "События (вебхук)", "HTTPS")
+Rel(api, tg, "Отправка сообщений", "HTTPS")
+Rel(api, vk, "Отправка сообщений", "HTTPS")
+
+Rel(api, pg, "Чтение и запись, транзакции", "SQL / TCP")
+Rel(api, redis, "Баланс попыток, рейтинг, частота", "RESP")
+Rel(api, rmq, "Публикует доменные события", "AMQP")
+Rel(api, centrifugo, "Публикует рейтинг и выигрыши", "HTTPS API")
+
+Rel(rmq, workers, "Доставляет события и задания", "AMQP")
+Rel(workers, pg, "Запись результатов выдачи", "SQL / TCP")
+Rel(workers, redis, "Обновление рейтинга (ZINCRBY)", "RESP")
+Rel(workers, centrifugo, "Уведомление о выигрыше", "HTTPS API")
+Rel(workers, tg, "Доставка приза/промокода", "HTTPS")
+Rel(workers, vk, "Доставка приза/промокода", "HTTPS")
+
+@enduml

@@ -1,0 +1,41 @@
+%% BPMN: процесс «Модерация и выдача приза»
+%% Пулы: Участник, Платформа «Затея», Организатор
+%% Сплошные стрелки — поток управления, пунктирные — поток сообщений между пулами
+flowchart TB
+  classDef event fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+  classDef task fill:#e3f2fd,stroke:#1565c0,stroke-width:1px;
+  classDef gateway fill:#fff8e1,stroke:#f9a825,stroke-width:1px;
+  classDef endev fill:#ffebee,stroke:#c62828,stroke-width:2px;
+
+  subgraph POOL_ORG["Пул: Организатор"]
+    direction TB
+    T_CHECK["Задача: Проверка заявки на выдачу"]:::task
+    G_APPROVED{"Одобрено?"}:::gateway
+  end
+
+  subgraph POOL_PLATFORM["Пул: Платформа «Затея»"]
+    direction TB
+    START(("Старт: событие «ПризВыдан»")):::event
+    T_QUEUE["Задача: Постановка в очередь выдачи"]:::task
+    G_MOD{"Требуется модерация?"}:::gateway
+    T_SEND["Задача: Отправка приза/промокода в канал (Telegram / VK / веб)"]:::task
+    T_NOTIFY["Задача: Уведомление участника"]:::task
+    T_RETURN["Задача: Возврат приза в фонд, промокод помечается свободным"]:::task
+    END_OK(("Конец: приз выдан")):::endev
+    END_REJ(("Конец: выдача отклонена")):::endev
+  end
+
+  subgraph POOL_USER["Пул: Участник"]
+    direction TB
+    U_RECEIVE(("Событие: получение приза")):::event
+  end
+
+  START --> T_QUEUE --> G_MOD
+  G_MOD -->|"Нет"| T_SEND
+  G_MOD -. "Да" .-> T_CHECK
+  T_CHECK --> G_APPROVED
+  G_APPROVED -. "Да" .-> T_SEND
+  G_APPROVED -. "Нет" .-> T_RETURN
+  T_SEND --> T_NOTIFY --> END_OK
+  T_NOTIFY -. "уведомление" .-> U_RECEIVE
+  T_RETURN --> END_REJ

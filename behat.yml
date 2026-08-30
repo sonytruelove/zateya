@@ -1,0 +1,11 @@
+default:
+    autoload:
+        '': '%paths.base%/features/bootstrap'
+    suites:
+        acceptance:
+            paths:
+                - '%paths.base%/features'
+            contexts:
+                - Tests\Acceptance\FeatureContext
+    formatters:
+        pretty: true

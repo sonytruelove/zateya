@@ -1,0 +1,14 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 8
+    paths:
+        - src
+        - app
+        - database/factories
+        - database/seeders
+    excludePaths:
+        - src/Infrastructure/Console/RoadRunnerWorker.php (?)
+    tmpDir: build/phpstan
+    treatPhpDocTypesAsCertain: false

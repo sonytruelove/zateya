@@ -1,0 +1,113 @@
+@import '@fontsource/golos-text/400.css';
+@import '@fontsource/golos-text/500.css';
+@import '@fontsource/golos-text/600.css';
+@import '@fontsource/golos-text/700.css';
+@import '@fontsource/golos-text/800.css';
+@import '@fontsource/golos-text/900.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Поверхности и фон */
+  --z-bg-app: #f2f3f5;
+  --z-surface: #ffffff;
+  --z-surface-muted: #f7f8fa;
+
+  /* Текст и границы */
+  --z-text: #1a1a1a;
+  --z-text-soft: #61666d;
+  --z-border: #e2e4e8;
+
+  /* Акцент */
+  --z-accent: #0b57d0;
+  --z-accent-hover: #0a4cb8;
+  --z-accent-soft: #e7eefc;
+
+  /* Статусы */
+  --z-success: #1e8e3e;
+  --z-warning: #b26a00;
+  --z-danger: #c5221f;
+
+  /* Форма */
+  --z-radius: 6px;
+  --z-radius-card: 10px;
+
+  color-scheme: light;
+}
+
+/* Задел под тёмную тему — включается добавлением класса .dark на <html> */
+.dark {
+  --z-bg-app: #14161a;
+  --z-surface: #1c1f24;
+  --z-surface-muted: #23262c;
+  --z-text: #f4f5f7;
+  --z-text-soft: #a3a9b3;
+  --z-border: #2c3038;
+  --z-accent: #4c8df5;
+  --z-accent-hover: #6ba1f7;
+  --z-accent-soft: #1e2b45;
+  --z-success: #4cb972;
+  --z-warning: #d99236;
+  --z-danger: #e8635f;
+
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    font-family: 'Golos Text', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--z-bg-app);
+    color: var(--z-text);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--z-text);
+  }
+
+  * {
+    border-color: var(--z-border);
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--z-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  .z-container {
+    @apply mx-auto w-full max-w-content px-4 sm:px-6;
+  }
+
+  .z-field-label {
+    @apply mb-1.5 block text-sm font-medium text-ink;
+  }
+
+  .z-hint {
+    @apply mt-1 text-xs text-ink-soft;
+  }
+}
+
+/* Мягкий scrollbar для таблиц */
+.z-scroll-x {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}

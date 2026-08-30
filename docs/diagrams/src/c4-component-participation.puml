@@ -1,0 +1,63 @@
+@startuml c4-component-participation
+' C4, уровень 3 — компоненты приложения для сценария «розыгрыш попытки»
+!pragma layout smetana
+!include ../.tools/c4/C4_Component.puml
+
+skinparam linetype ortho
+skinparam defaultFontName sans-serif
+LAYOUT_TOP_DOWN()
+
+title Компоненты приложения — сценарий «Розыгрыш попытки» (C4, уровень 3)
+
+Container(spa, "Веб-клиент (SPA)", "Vue", "Игровой экран механики")
+
+System_Boundary(app, "Приложение (Laravel / Octane на RoadRunner)") {
+  Component(ctrl, "Контроллер попыток", "Presentation, HTTP", "Принимает POST /attempts, валидирует запрос по OpenAPI, формирует ответ")
+  Component(uc, "Сценарий «Сыграть попытку»", "Application, сценарий использования", "Оркестрация: баланс попыток, оценка механики, резерв приза, выдача промокода, транзакция, события")
+  Component(mechanic, "Служба механики", "Domain", "Quiz / Wheel / «Собери набор»: evaluate() возвращает исход попытки")
+  Component(pool, "Служба призового фонда", "Domain", "PrizePool.reserveOne(): атомарное списание остатка")
+  Component(book, "Служба книги промокодов", "Domain", "PromoCodeBook.issueNext(): атомарная выдача следующего кода")
+
+  Component(pAttempts, "Порт: баланс попыток", "Application, порт", "Проверка и списание попыток, ограничение частоты")
+  Component(pLeaderboard, "Порт: хранилище рейтинга", "Application, порт", "Инкремент очков участника")
+  Component(pEvents, "Порт: публикатор событий", "Application, порт", "Публикация доменных событий")
+  Component(pRealtime, "Порт: публикатор реального времени", "Application, порт", "Уведомление о выигрыше")
+  Component(repo, "Хранилища Eloquent", "Infrastructure", "Кампания, Механика, Участник, Попытка, Приз, Промокод")
+
+  Component(aRedis, "Клиент Redis", "Infrastructure", "Счётчики попыток, рейтинг ZSET")
+  Component(aRabbit, "Клиент RabbitMQ", "Infrastructure", "Публикация в обмен доменных событий")
+  Component(aCentrifugo, "Клиент Centrifugo", "Infrastructure", "HTTP API публикации в каналы")
+}
+
+ContainerDb(pg, "PostgreSQL", "База данных", "")
+ContainerDb(redis, "Redis", "Счётчики, рейтинг", "")
+ContainerQueue(rmq, "RabbitMQ", "Доменные события", "")
+System_Ext(centrifugo, "Centrifugo", "Веб-сокеты")
+
+Rel(spa, ctrl, "POST /attempts", "HTTPS / JSON")
+Rel(ctrl, uc, "Выполняет сценарий")
+
+Rel(uc, pAttempts, "Проверяет и списывает попытку")
+Rel(uc, mechanic, "evaluate()")
+Rel(uc, pool, "reserveOne()")
+Rel(uc, book, "issueNext()")
+Rel(uc, repo, "Сохраняет Попытку в транзакции")
+Rel(uc, pEvents, "Публикует «ПризВыдан»")
+Rel(uc, pLeaderboard, "Инкремент очков")
+Rel(uc, pRealtime, "Уведомление о выигрыше")
+
+Rel(mechanic, repo, "Читает конфигурацию механики")
+Rel(pool, repo, "UPDATE ... WHERE remaining > 0")
+Rel(book, repo, "SELECT ... FOR UPDATE")
+
+Rel(pAttempts, aRedis, "")
+Rel(pLeaderboard, aRedis, "")
+Rel(pEvents, aRabbit, "")
+Rel(pRealtime, aCentrifugo, "")
+
+Rel(repo, pg, "SQL / TCP")
+Rel(aRedis, redis, "RESP")
+Rel(aRabbit, rmq, "AMQP")
+Rel(aCentrifugo, centrifugo, "HTTPS API")
+
+@enduml

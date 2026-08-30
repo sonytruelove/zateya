@@ -1,0 +1,34 @@
+@startuml c4-context
+' C4, уровень 1 — контекст системы «Затея»
+!pragma layout smetana
+!include ../.tools/c4/C4_Context.puml
+
+skinparam linetype ortho
+skinparam defaultFontName sans-serif
+LAYOUT_TOP_DOWN()
+
+title Контекст системы «Затея» (C4, уровень 1)
+
+Person(participant, "Участник", "Играет в промо-механику через веб, Telegram-бот или VK mini app")
+Person(organizer, "Организатор кампаний", "Сотрудник бренда: собирает кампанию, загружает призовой фонд и промокоды, модерирует выдачу")
+
+System(zateya, "Затея", "Платформа запуска геймифицированных промо-механик и мотивационных программ: конструктор кампаний, атомарная выдача призов и промокодов, живой рейтинг")
+
+System_Ext(tg, "Telegram Bot API", "Приём обновлений и отправка сообщений участнику в Telegram")
+System_Ext(vk, "VK API", "Авторизация и события VK mini app, отправка сообщений")
+System_Ext(centrifugo, "Centrifugo", "Сервер веб-сокетов: доставка живого рейтинга и уведомлений о выигрыше")
+System_Ext(broker, "Брокер сообщений (RabbitMQ)", "Доменные события, отложенная выдача призов, уведомления")
+
+Rel(participant, zateya, "Играет попытки, смотрит рейтинг", "HTTPS / JSON")
+Rel(organizer, zateya, "Настраивает кампании, модерирует выдачу", "HTTPS / JSON")
+
+Rel(tg, zateya, "Обновления (вебхук)", "HTTPS")
+Rel(zateya, tg, "Сообщения, промокоды", "HTTPS")
+Rel(vk, zateya, "События mini app (вебхук)", "HTTPS")
+Rel(zateya, vk, "Сообщения, промокоды", "HTTPS")
+Rel(zateya, centrifugo, "Публикует обновления рейтинга и выигрыши", "HTTPS API")
+Rel(centrifugo, participant, "Живой рейтинг, уведомления", "WebSocket")
+Rel(zateya, broker, "Публикует доменные события", "AMQP")
+Rel(broker, zateya, "Доставляет события воркерам", "AMQP")
+
+@enduml

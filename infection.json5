@@ -1,0 +1,24 @@
+{
+    // Мутационное тестирование доказывает, что тесты ловят дефекты, а не просто
+    // исполняют строки. Мутируется только доменное ядро и слой сценариев.
+    $schema: "vendor/infection/infection/resources/schema.json",
+    source: {
+        directories: [
+            "src/Domain",
+            "src/Application",
+        ],
+    },
+    logs: {
+        text: "build/infection/infection.log",
+        html: "build/infection/infection.html",
+        summary: "build/infection/summary.log",
+    },
+    tmpDir: "build/infection",
+    mutators: {
+        "@default": true,
+    },
+    minMsi: 72,
+    minCoveredMsi: 72,
+    testFramework: "phpunit",
+    testFrameworkOptions: "--testsuite=Unit",
+}

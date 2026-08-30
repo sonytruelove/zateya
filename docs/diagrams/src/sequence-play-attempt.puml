@@ -1,0 +1,82 @@
+@startuml sequence-play-attempt
+' UML: диаграмма последовательности «розыгрыш попытки в механике»
+!pragma layout smetana
+skinparam defaultFontName sans-serif
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 220
+
+title Розыгрыш попытки в механике
+
+actor "Участник" as U
+participant "Веб-клиент (SPA)" as SPA
+participant "Внешний интерфейс\n(Laravel / RoadRunner)" as API
+participant "Сценарий\n«Сыграть попытку»" as UC
+database "Redis" as REDIS
+participant "Механика" as MECH
+participant "PrizePool" as POOL
+participant "PromoCodeBook" as BOOK
+database "PostgreSQL" as PG
+queue "RabbitMQ" as RMQ
+participant "Centrifugo" as CENT
+
+U -> SPA : Нажимает «Играть»
+SPA -> API : POST /attempts { campaignId, mechanicId }
+API -> UC : выполнить(команда)
+
+UC -> REDIS : DECR balance:{participant} с проверкой > 0
+alt Попыток нет
+  REDIS --> UC : остаток < 0 (откат)
+  UC --> API : ОтказПоПопыткам
+  API --> SPA : 409 Conflict
+  SPA --> U : «Попытки закончились»
+else Попытка списана
+  REDIS --> UC : остаток >= 0
+
+  UC -> MECH : evaluate(вход)
+  MECH --> UC : Исход { победа, очки, уровень приза }
+
+  group Транзакция PostgreSQL
+    alt Победа с призом
+      UC -> POOL : reserveOne(уровень)
+      POOL -> PG : UPDATE prize_pool SET remaining = remaining - 1\nWHERE id = ? AND remaining > 0
+      alt Фонд не пуст
+        PG --> POOL : 1 строка изменена
+        POOL --> UC : Приз
+        UC -> BOOK : issueNext(participant)
+        BOOK -> PG : SELECT ... FROM promo_codes\nWHERE issued_at IS NULL ORDER BY id LIMIT 1 FOR UPDATE
+        BOOK -> PG : UPDATE promo_codes SET issued_at = now(), issued_to = ?
+        PG --> BOOK : код
+        BOOK --> UC : Промокод
+      else Фонд пуст
+        PG --> POOL : 0 строк
+        POOL --> UC : ФондИсчерпан
+        note over UC : Понижаем до утешительного:\nвыигрыш без приза
+      end
+    else Проигрыш / утешительный
+      note over UC : Приз и промокод не выдаются
+    end
+
+    UC -> PG : INSERT INTO attempts (outcome, prize_id, promo_code_id, played_at)
+    PG --> UC : Попытка сохранена
+  end
+
+  UC -> RMQ : publish «ПопыткаСыграна»
+  alt Приз выдан
+    UC -> RMQ : publish «ПризВыдан»
+  end
+  alt Промокод выдан
+    UC -> RMQ : publish «ПромокодВыдан»
+  end
+
+  UC -> REDIS : ZINCRBY leaderboard:{campaign} очки {participant}
+  UC -> CENT : publish в канал campaign:{id} — обновление рейтинга
+  alt Есть выигрыш
+    UC -> CENT : publish в канал participant:{id} — уведомление о выигрыше
+  end
+
+  UC --> API : Результат { исход, приз?, промокод?, местоВРейтинге }
+  API --> SPA : 200 OK
+  SPA --> U : Показ результата и анимации
+end
+
+@enduml

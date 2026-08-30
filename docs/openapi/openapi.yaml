@@ -1,0 +1,511 @@
+openapi: 3.1.0
+info:
+  title: Затея — программный интерфейс промо-платформы
+  version: "1.0.0"
+  description: |
+    Внешний интерфейс платформы запуска геймифицированных промо-механик.
+    Разделён на три части: публичный интерфейс участника, интерфейс организатора
+    (по маркеру) и приём обратных вызовов каналов (Telegram, VK).
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Локальное окружение
+
+tags:
+  - name: Участие
+    description: Действия участника промо-кампании
+  - name: Рейтинг
+    description: Живой рейтинг кампании
+  - name: Организатор
+    description: Управление кампаниями, призовым фондом и промокодами
+  - name: Каналы
+    description: Обратные вызовы Telegram и VK
+
+paths:
+  /participation/sessions:
+    post:
+      tags: [Участие]
+      summary: Открыть сессию участника
+      description: |
+        Регистрирует участника в кампании по идентификатору канала (или возвращает
+        существующего) и выдаёт непрозрачный маркер сессии. Новому участнику
+        начисляется дневная квота попыток кампании.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenSessionRequest'
+      responses:
+        '201':
+          description: Сессия открыта
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Session'
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /campaigns/{slug}:
+    get:
+      tags: [Участие]
+      summary: Карточка кампании
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+      security:
+        - ParticipantToken: []
+        - {}
+      responses:
+        '200':
+          description: Карточка кампании
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CampaignCard' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /campaigns/{slug}/leaderboard:
+    get:
+      tags: [Рейтинг]
+      summary: Рейтинг кампании
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+      security:
+        - ParticipantToken: []
+        - {}
+      responses:
+        '200':
+          description: Верхние позиции и позиция текущего участника
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      entries:
+                        type: array
+                        items: { $ref: '#/components/schemas/LeaderboardEntry' }
+                      me:
+                        oneOf:
+                          - { $ref: '#/components/schemas/LeaderboardEntry' }
+                          - { type: 'null' }
+
+  /campaigns/{slug}/attempts:
+    post:
+      tags: [Участие]
+      summary: Разыграть попытку
+      description: |
+        Списывает одну попытку и разыгрывает механику. При выигрыше атомарно
+        резервирует приз из фонда и выдаёт следующий промокод.
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+      security:
+        - ParticipantToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                move:
+                  type: object
+                  description: Данные хода, зависят от механики. Для колеса фортуны — пустой объект.
+                  properties:
+                    answers:
+                      type: array
+                      items:
+                        type: object
+                        required: [question_id, option_id]
+                        properties:
+                          question_id: { type: string }
+                          option_id: { type: string }
+      responses:
+        '200':
+          description: Результат розыгрыша
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/PlayResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /campaigns/{slug}/rewards/me:
+    get:
+      tags: [Участие]
+      summary: Мои призы
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+      security:
+        - ParticipantToken: []
+      responses:
+        '200':
+          description: Список выданных наград
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Reward' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /admin/campaigns:
+    get:
+      tags: [Организатор]
+      summary: Список кампаний
+      security: [{ OrganizerToken: [] }]
+      responses:
+        '200':
+          description: Кампании организатора
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/CampaignSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Организатор]
+      summary: Создать кампанию (черновик)
+      security: [{ OrganizerToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCampaignRequest' }
+      responses:
+        '201':
+          description: Кампания создана
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      campaign_id: { type: string, format: uuid }
+                      slug: { type: string }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /admin/campaigns/{id}/publish:
+    post:
+      tags: [Организатор]
+      summary: Опубликовать кампанию
+      security: [{ OrganizerToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Кампания опубликована }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /admin/campaigns/{id}/prizes:
+    post:
+      tags: [Организатор]
+      summary: Добавить позицию в призовой фонд
+      security: [{ OrganizerToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, quantity]
+              properties:
+                title: { type: string, minLength: 2, maxLength: 120 }
+                quantity: { type: integer, minimum: 1, maximum: 1000000 }
+      responses:
+        '201':
+          description: Позиция добавлена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      prize_pool_left: { type: integer }
+
+  /admin/campaigns/{id}/promo-codes:
+    post:
+      tags: [Организатор]
+      summary: Загрузить пул промокодов
+      description: Принимает список строк в поле `codes` или файл CSV/TXT в поле `file`.
+      security: [{ OrganizerToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codes]
+              properties:
+                codes:
+                  type: array
+                  items: { type: string, maxLength: 64 }
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: Итог загрузки
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      added: { type: integer }
+                      skipped: { type: integer }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /admin/campaigns/{id}:
+    delete:
+      tags: [Организатор]
+      summary: Удалить кампанию со всеми связанными данными
+      security: [{ OrganizerToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Удалено }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/campaigns/{id}/stats:
+    get:
+      tags: [Организатор]
+      summary: Сводка по кампании
+      security: [{ OrganizerToken: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Показатели кампании
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CampaignStats' }
+
+  /channels/telegram/{secret}:
+    post:
+      tags: [Каналы]
+      summary: Приём обновлений Telegram-бота
+      parameters:
+        - name: secret
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Обновление принято }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /channels/vk/callback:
+    post:
+      tags: [Каналы]
+      summary: Приём обратных вызовов VK
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type: { type: string, enum: [confirmation, attempt] }
+                secret: { type: string }
+                user_id: { type: integer }
+      responses:
+        '200': { description: Ответ VK (подтверждение или результат розыгрыша) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    ParticipantToken:
+      type: http
+      scheme: bearer
+      description: Маркер сессии участника, выданный `POST /participation/sessions`
+    OrganizerToken:
+      type: http
+      scheme: bearer
+      description: Общий маркер организатора (`ADMIN_API_TOKEN`)
+
+  parameters:
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema: { type: string, maxLength: 64 }
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Требуется корректный маркер
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Действие запрещено для этого участника
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Нарушено предусловие (нет попыток, кампания не принимает и т.п.)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Некорректные поля запроса
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            fields:
+              type: object
+              additionalProperties:
+                type: array
+                items: { type: string }
+    OpenSessionRequest:
+      type: object
+      required: [channel, campaign_slug, channel_token]
+      properties:
+        channel: { type: string, enum: [web, telegram, vk] }
+        campaign_slug: { type: string }
+        channel_token: { type: string, maxLength: 128 }
+        display_name: { type: string, maxLength: 60 }
+    Session:
+      type: object
+      properties:
+        participant_id: { type: string, format: uuid }
+        display_name: { type: string }
+        attempts_left: { type: integer }
+        token: { type: string }
+        is_new: { type: boolean }
+    CampaignCard:
+      type: object
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        mechanic: { type: string, enum: [quiz, wheel, collection, promo] }
+        mechanic_title: { type: string }
+        status: { type: string, enum: [draft, scheduled, active, paused, finished, archived] }
+        status_title: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        color_hex: { type: string }
+        emoji: { type: string }
+        accepting_attempts: { type: boolean }
+        attempts_left: { type: integer }
+    CampaignSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        title: { type: string }
+        mechanic: { type: string }
+        mechanic_title: { type: string }
+        status: { type: string }
+        status_title: { type: string }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+    CreateCampaignRequest:
+      type: object
+      required: [slug, title, mechanic, starts_at, ends_at, mechanic_settings]
+      properties:
+        slug: { type: string, minLength: 3, maxLength: 64 }
+        title: { type: string, minLength: 3, maxLength: 140 }
+        mechanic: { type: string, enum: [quiz, wheel, collection, promo] }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        color_hex: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+        emoji: { type: string, maxLength: 8 }
+        attempts_per_participant: { type: integer, minimum: 1, maximum: 100 }
+        mechanic_settings:
+          type: object
+          description: |
+            Для `quiz` — `{ win_threshold, questions: [{ id, correct_option_id, points }] }`.
+            Для `wheel` — `{ sectors: [{ label, weight, winning, points }] }`.
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank: { type: integer }
+        display_name: { type: string }
+        score: { type: integer }
+    PlayResult:
+      type: object
+      properties:
+        won: { type: boolean }
+        score: { type: integer }
+        detail: { type: string }
+        attempts_left: { type: integer }
+        prize_title:
+          oneOf: [{ type: string }, { type: 'null' }]
+        promo_code:
+          oneOf: [{ type: string }, { type: 'null' }]
+    Reward:
+      type: object
+      properties:
+        title: { type: string }
+        promo_code:
+          oneOf: [{ type: string }, { type: 'null' }]
+        awarded_at: { type: string, format: date-time }
+    CampaignStats:
+      type: object
+      properties:
+        attempts: { type: integer }
+        participants: { type: integer }
+        winners: { type: integer }
+        prize_pool_left: { type: integer }
+        promo_codes_left: { type: integer }
+        activity:
+          type: array
+          items: { type: integer }

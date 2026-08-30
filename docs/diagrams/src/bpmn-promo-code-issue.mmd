@@ -1,0 +1,47 @@
+%% BPMN: процесс «Выпуск и выдача промокода»
+%% Пулы: Организатор, Платформа «Затея», Участник
+%% Сплошные стрелки — поток управления, пунктирные — поток сообщений между пулами
+flowchart TB
+  classDef event fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+  classDef task fill:#e3f2fd,stroke:#1565c0,stroke-width:1px;
+  classDef gateway fill:#fff8e1,stroke:#f9a825,stroke-width:1px;
+  classDef endev fill:#ffebee,stroke:#c62828,stroke-width:2px;
+
+  subgraph POOL_ORG["Пул: Организатор"]
+    direction TB
+    O_START(("Старт: загрузка пула промокодов")):::event
+    O_REFILL["Задача: Пополнить пул новыми кодами"]:::task
+    O_END(("Конец: пул пополнен")):::endev
+  end
+
+  subgraph POOL_PLATFORM["Пул: Платформа «Затея»"]
+    direction TB
+    P_VALIDATE["Задача: Валидация и дедупликация кодов"]:::task
+    P_STORE["Задача: Сохранение книги промокодов"]:::task
+    P_NEED(("Событие: нужен код для участника")):::event
+    P_ISSUE["Задача: Атомарная выдача следующего кода (SELECT ... FOR UPDATE)"]:::task
+    G_LEFT{"Пул не исчерпан?"}:::gateway
+    P_MSG["Задача: Сообщение организатору «Пополнить пул»"]:::task
+    P_BIND["Задача: Привязка кода к участнику"]:::task
+    P_DELIVER["Задача: Выдача кода в канал (Telegram / VK / веб)"]:::task
+    P_END_OK(("Конец: код выдан")):::endev
+    P_END_EMPTY(("Конец: пул исчерпан")):::endev
+  end
+
+  subgraph POOL_USER["Пул: Участник"]
+    direction TB
+    U_GET(("Событие: получение промокода")):::event
+  end
+
+  O_START -. "загрузка файла кодов" .-> P_VALIDATE
+  P_VALIDATE --> P_STORE
+  P_STORE -. "позже: пришло время выдачи" .-> P_NEED
+  P_NEED --> P_ISSUE --> G_LEFT
+  G_LEFT -->|"Нет"| P_MSG
+  G_LEFT -->|"Да"| P_BIND
+  P_MSG -. "уведомление" .-> O_REFILL
+  P_MSG --> P_END_EMPTY
+  O_REFILL -. "новый файл кодов" .-> P_VALIDATE
+  O_REFILL --> O_END
+  P_BIND --> P_DELIVER --> P_END_OK
+  P_DELIVER -. "промокод" .-> U_GET

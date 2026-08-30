@@ -1,0 +1,116 @@
+# Конвейер проверок качества и безопасности «Затеи».
+# Уровни: сборка → качество кода → тесты → безопасность → мутационное тестирование.
+
+stages: [build, quality, test, security, mutation]
+
+variables:
+  COMPOSER_ALLOW_SUPERUSER: "1"
+  APP_ENV: testing
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_DATABASE: zateya_test
+  DB_USERNAME: zateya
+  DB_PASSWORD: zateya
+
+default:
+  image: php:8.5-cli
+  cache:
+    key: composer-$CI_COMMIT_REF_SLUG
+    paths: [vendor/, .composer-cache/]
+  before_script:
+    - apt-get update -yqq && apt-get install -yqq git unzip libpq-dev libzip-dev libicu-dev
+    - docker-php-ext-install -j"$(nproc)" pdo_pgsql sockets bcmath intl zip
+    - pecl install pcov redis && docker-php-ext-enable pcov redis
+    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+    - composer install --no-interaction --prefer-dist --no-progress
+
+build:vendor:
+  stage: build
+  script:
+    - composer validate --strict
+    - php -v && composer --version
+
+quality:style:
+  stage: quality
+  script:
+    - php vendor/bin/php-cs-fixer fix --dry-run --diff
+
+quality:static-analysis:
+  stage: quality
+  script:
+    - php -d memory_limit=1G vendor/bin/phpstan analyse --no-progress --error-format=gitlab > phpstan-report.json || (cat phpstan-report.json; exit 1)
+  artifacts:
+    when: always
+    reports:
+      codequality: phpstan-report.json
+
+quality:layers:
+  stage: quality
+  script:
+    - php vendor/bin/deptrac analyse --config-file=deptrac.yaml --no-progress
+
+quality:complexity:
+  stage: quality
+  script:
+    - php vendor/bin/phpmd src text phpmd.xml
+
+quality:rector:
+  stage: quality
+  allow_failure: true
+  script:
+    - php vendor/bin/rector process --dry-run
+
+quality:openapi:
+  stage: quality
+  image: node:22-alpine
+  before_script: []
+  cache: {}
+  script:
+    - npx --yes @redocly/cli@1 lint docs/openapi/openapi.yaml
+
+test:phpunit:
+  stage: test
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+  variables:
+    POSTGRES_DB: zateya_test
+    POSTGRES_USER: zateya
+    POSTGRES_PASSWORD: zateya
+  script:
+    - cp .env.example .env && php artisan key:generate
+    - php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text --coverage-cobertura coverage.xml --log-junit junit.xml
+  coverage: '/^\s*Lines:\s*(\d+\.\d+)\%/'
+  artifacts:
+    when: always
+    reports:
+      junit: junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+
+test:acceptance:
+  stage: test
+  script:
+    - php vendor/bin/behat -n --no-colors
+
+security:sast:
+  stage: security
+  image: returntocorp/semgrep:latest
+  before_script: []
+  cache: {}
+  script:
+    - semgrep --config p/php --config p/security-audit --config p/owasp-top-ten --error --metrics=off --exclude vendor --exclude frontend src
+
+security:dependencies:
+  stage: security
+  script:
+    - composer audit --no-interaction --format=plain
+
+mutation:infection:
+  stage: mutation
+  script:
+    - php -d pcov.enabled=1 vendor/bin/infection --min-msi=72 --min-covered-msi=72 --threads="$(nproc)" --only-covered --no-progress --no-interaction
+  artifacts:
+    when: always
+    paths: [build/infection/]

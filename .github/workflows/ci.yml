@@ -1,0 +1,103 @@
+name: Проверки качества
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: zateya_test
+          POSTGRES_USER: zateya
+          POSTGRES_PASSWORD: zateya
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U zateya" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_DATABASE: zateya_test
+      DB_USERNAME: zateya
+      DB_PASSWORD: zateya
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установка PHP 8.5
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: pdo_pgsql, redis, sockets, bcmath, intl, zip
+          coverage: pcov
+
+      - name: Установка зависимостей
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Формат кода
+        run: php vendor/bin/php-cs-fixer fix --dry-run --diff
+
+      - name: Статический анализ
+        run: php -d memory_limit=1G vendor/bin/phpstan analyse --no-progress
+
+      - name: Границы слоёв
+        run: php vendor/bin/deptrac analyse --config-file=deptrac.yaml --no-progress
+
+      - name: Цикломатическая сложность
+        run: php vendor/bin/phpmd src text phpmd.xml
+
+      - name: Подготовка окружения
+        run: cp .env.example .env && php artisan key:generate
+
+      - name: Модульные и интеграционные тесты с покрытием
+        run: php -d pcov.enabled=1 vendor/bin/phpunit --coverage-text
+
+      - name: Приёмочные сценарии (Behat)
+        run: php vendor/bin/behat -n --no-colors
+
+      - name: Мутационное тестирование
+        run: php -d pcov.enabled=1 vendor/bin/infection --min-msi=72 --min-covered-msi=72 --threads=4 --only-covered --no-progress --no-interaction
+
+      - name: Аудит зависимостей
+        run: composer audit --no-interaction
+
+  security-sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep (PHP + OWASP Top 10)
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/php p/security-audit p/owasp-top-ten
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  openapi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npx --yes @redocly/cli@1 lint docs/openapi/openapi.yaml

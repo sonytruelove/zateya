@@ -1,0 +1,9 @@
+<svg width="196" height="48" viewBox="0 0 196 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Затея">
+  <rect x="1" y="1" width="46" height="46" rx="10" fill="#F2F3F5" stroke="#E2E4E8" stroke-width="1"/>
+  <path d="M24 24C18 14 20 6 24 3C28 6 30 14 24 24Z" fill="#0B57D0"/>
+  <path d="M24 24C34 18 42 20 45 24C42 28 34 30 24 24Z" fill="#1A1A1A"/>
+  <path d="M24 24C30 34 28 42 24 45C20 42 18 34 24 24Z" fill="#0B57D0"/>
+  <path d="M24 24C14 30 6 28 3 24C6 20 14 18 24 24Z" fill="#1A1A1A"/>
+  <circle cx="24" cy="24" r="3.4" fill="#FFFFFF"/>
+  <text x="60" y="32" font-family="'Golos Text', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="26" font-weight="800" letter-spacing="-0.5" fill="#1A1A1A">Затея</text>
+</svg>
